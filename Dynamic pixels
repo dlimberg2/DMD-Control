@@ -1,0 +1,149 @@
+% Prepare for DMD
+dll_name = 'alp41basic';,dll_header = 'alpbasic';,pause(0.5)
+%  Arduino 
+ard = arduino();,[return_lib] = api_library(dll_name, dll_header);,[return_allocate, hdevice] = api_allocate(dll_name);,return_check(return_allocate);,reset_mode = 4;,reset_address = 0;,[return_reset] = api_reset(dll_name, hdevice, reset_mode, reset_address),return_check(return_reset);,first_block = 0;,last_block = 15;,[return_clear] = api_clear(dll_name, hdevice, first_block, last_block);,return_check(return_clear);,query = 5;,[return_queryptr] = api_inquire(dll_name, hdevice, query);,get(return_queryptr);,pause(0.1),n = 768;,m = 1024;,
+dname = uigetdir;,cd(dname),background = imread('F:\User Data\Hyunki\Design\white.png');,background=background(:,:,1);,background = imresize(background, [n,m]);,time1 = 0 ;,time2 = 0 ;
+
+%Microscope control
+import mmcorej.*;
+mmc = CMMCore;
+mmc.loadSystemConfiguration ('F:\User Data\Hyunki\DMDRoot\191118-nocamera.cfg');
+
+% make 5x5 coordinate/prepare autofocus
+x = mmc.getXPosition('XYStage');
+y = mmc.getYPosition('XYStage');
+z0 = mmc.getPosition('TIZDrive');
+% load('Coord.mat');
+% property setup
+mmc.getProperty('Spectra','State')
+mmc.setProperty('Spectra','State','1')
+mmc.setProperty('Spectra','White_Level','100')
+mmc.setProperty('Core','AutoShutter','0')
+mmc.setProperty('Spectra','White_Enable','0')
+%mmc.setProperty('TIFilterBlock2','State','2') % change to 99 mirror
+mmc.setProperty('TILightPath','State','1') % lightpath left100
+%% Makes image stack with one point for video - works, try1
+
+black = zeros(768,1024);
+spots = zeros(768,1024);
+white = spots(:,:)+1;
+
+spotsize = 50; %side length of square
+
+numspotsx = 50; %total of x positions to visit
+numspotsy = 1; %total y positions to visit
+xspacing = 10; %spacing between x positions
+yspacing = 50; %spacing between y positions
+
+xstart = 0; %where the pattern starts in x
+ystart = 100;
+exposuretime = 0; %delay time in seconds where mirrors stop moving
+
+for m = 1:numspotsy
+    ypos = m * yspacing + ystart;
+    for n = 1:numspotsx
+        xpos = n * xspacing + xstart;
+        for h = 1:spotsize
+            for w = 1:spotsize
+                spots(ypos+w,xpos+h) = 1; %writes a single spot to be 1
+            end
+        end
+        imshow(spots); %show single spot
+        DMD_on (spots,dll_name,hdevice) %send matrix "spots" to DMD device
+        pause(exposuretime); %turn on light
+        spots = zeros(768,1024); %write over matrix all black
+	
+        %DMD_on (black,dll_name,hdevice) %turn DMD to black
+        %imshow(black);
+    end
+end    
+
+DMD_on (black,dll_name,hdevice) %turn DMD device to black
+imshow(black); %show black screen
+%% Make image - brute force
+black = zeros(768,1024);
+spots = zeros(768,1024);
+white = spots(:,:) + 1;
+
+%pick array size
+spotsize = 20; %side length of square
+numspotsx = 3;
+numspotsy = 3;
+xspacing = 100;
+yspacing = 100;
+xstart = 0;
+ystart = 0;
+
+% xstart = size(black,2)/2;
+% ystart = size(black,1)/2;
+
+for m = 0:numspotsx-1
+    xpos = m * xspacing + xstart;
+    for n = 0:numspotsy-1
+        ypos = n * yspacing + ystart;
+        for h = 1:spotsize
+            for w = 1:spotsize
+                spots(ypos+w,xpos+h) = 1;
+            end
+        end
+    end
+end
+
+imshow(spots)
+%% Make image from array?? Giant mess...
+black = zeros(768,1024); %all zeros
+spots = zeros(768,1024); %initialize spots
+white = ones(768,1024);
+
+height = 20;
+width = 40;
+center = [height/2,width/2];
+
+rectangle = ones(height,width);
+
+totalspots = 3;
+totalwhitepixels = height * width * totalspots;
+
+%give coordinates of where squares should go
+spotlocations = zeros(totalspots,2);
+
+spotlocations(1,:) = [100,500];
+spotlocations(2,:) = [300,400];
+spotlocations(3,:) = [1,1];
+
+%make array with all white pixel locations
+spotpixels = zeros(totalwhitepixels,2);
+
+for m = 1:totalspots
+    for k = 0:width-1
+        spotpixels(k+spotlocations(m,1),1) = (1:width)+spotlocations(m,1);
+    spotpixels(:,2) = (1:height)+spotlocations(m,2);
+end
+for n = 1:totalwhitepixels
+    spots(spotpixels(n,1),spotpixels(n,2)) = 1;
+end
+
+imshow(spots)
+
+%% Moving array
+
+
+%movement conditions
+
+exposuretime = 0.01; %seconds
+xstepsize = 2;
+steps = 100;
+
+for t = 0:steps
+    
+    imshow(spots); %show single spot
+    DMD_on (spots,dll_name,hdevice)
+	pause(exposuretime); %turn on light
+	spots = zeros(768,1024); %write over matrix all black
+	
+%     DMD_on (black,dll_name,hdevice) %turn DMD to black
+%     imshow(black);
+end
+
+DMD_on (black,dll_name,hdevice) %turn DMD to black
+imshow(black);
